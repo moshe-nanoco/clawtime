@@ -1,0 +1,45 @@
+{
+  "name": "clawtime",
+  "version": "1.0.0",
+  "description": "A beautiful terminal animation of the nanoclaw shrimp — a cute waving crustacean, right in your terminal.",
+  "type": "module",
+  "module": "src/cli.ts",
+  "bin": {
+    "clawtime": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "scripts",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "raster": "node scripts/rasterize.mjs",
+    "gen": "node scripts/generate.mjs",
+    "build": "bun build ./src/cli.ts --outdir=dist --target=node --minify",
+    "dev": "bun run ./src/cli.ts",
+    "start": "node dist/cli.js",
+    "prepare": "bun run build"
+  },
+  "keywords": [
+    "cli",
+    "terminal",
+    "animation",
+    "ascii-art",
+    "ansi",
+    "shrimp",
+    "nanoclaw",
+    "crustacean",
+    "fun"
+  ],
+  "author": "moshe-nanoco",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.8.2"
+  }
+}
