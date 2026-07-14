@@ -4,7 +4,14 @@ import readline from "readline";
 import process from "process";
 
 import { Animation } from "./animation";
-import { ANIMATION_DATA, FRAME_WIDTH, FRAME_HEIGHT } from "./animation-data";
+import {
+  FRAME_HEIGHT,
+  FRAME_WIDTH,
+  JUMP_ANIMATION_DATA,
+  WAVE_ANIMATION_DATA,
+} from "./animation-data";
+
+type AnimationMode = "wave" | "jump";
 
 const MICROS_PER_FRAME = 30_000;
 const FRAME_DELAY = MICROS_PER_FRAME / 1000; // convert to milliseconds
@@ -49,7 +56,7 @@ function parseColor(v: string): string | null {
 }
 
 function showColorHelp() {
-  console.log("\nclawtime — the nanoclaw shrimp, waving in your terminal 🦐");
+  console.log("\nclawtime — the nanoclaw shrimp, waving or jumping in your terminal 🦐");
   console.log("\nAvailable body colors:");
   console.log("----------------------");
   for (const [name, rgb] of Object.entries(colorMap)) {
@@ -59,7 +66,10 @@ function showColorHelp() {
     "\nDefault: \x1b[38;2;86;237;214mnanoclaw teal\x1b[0m (used when -c is omitted)"
   );
   console.log("\nUsage:");
-  console.log("  clawtime                    Wave hello with the default shrimp");
+  console.log("  clawtime                    Randomly choose wave or jump");
+  console.log("  clawtime --wave             Always play the claw-wave loop");
+  console.log("  clawtime --jump             Play the Nano Jump loop");
+  console.log("  clawtime --mode <mode>      Select wave or jump");
   console.log("  clawtime -c <name>          Recolor the body (e.g. -c pink)");
   console.log("  clawtime -c <#hex|r,g,b>    Recolor with any color");
   console.log("  clawtime --colors           Show this color help");
@@ -98,11 +108,22 @@ const args = process.argv.slice(2);
 let colorArg: string | null = null; // null = keep the default teal palette
 let durationInSeconds = DEFAULT_DURATION;
 let pauseOnFocusLost = true; // Default behavior is to pause when focus is lost
+let animationMode: AnimationMode | null = null;
 
 async function parseArgs() {
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--colors" || args[i] === "-h" || args[i] === "--help") {
       showColorHelp();
+    } else if (args[i] === "--wave" || args[i] === "-w") {
+      animationMode = "wave";
+    } else if (args[i] === "--jump" || args[i] === "-j") {
+      animationMode = "jump";
+    } else if (args[i] === "--mode") {
+      const mode = args[i + 1];
+      if (mode === "wave" || mode === "jump") {
+        animationMode = mode;
+        i++;
+      }
     } else if (args[i] === "--select-color") {
       colorArg = await selectColorInteractively();
     } else if (args[i] === "--color" || args[i] === "-c") {
@@ -413,8 +434,10 @@ async function main() {
     Animation.setHighlightColor(colorArg);
   }
 
-  // Initialize animation with data
-  Animation.initialize(ANIMATION_DATA);
+  // With no explicit mode flag, every launch gets an even chance of waving or
+  // jumping. Flags always win, making scripts and screenshots deterministic.
+  const selectedMode = animationMode ?? (Math.random() < 0.5 ? "wave" : "jump");
+  Animation.initialize(selectedMode === "jump" ? JUMP_ANIMATION_DATA : WAVE_ANIMATION_DATA);
 
   // Enable alternative screen buffer, hide cursor, and enable focus reporting first
   process.stdout.write("\x1b[?1049h\x1b[?25l\x1b[?1004h");

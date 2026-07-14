@@ -3,8 +3,10 @@
 The **nanoclaw** shrimp, waving hello right in your terminal — redrawn with the
 expressive ASCII density and fluid motion of Ghosttime. The raised claw waves,
 the antennae sway, the eyes blink, and a few bubbles and glints drift past.
-Smooth, flicker-free, focus-aware, and
-auto-centered, with basically no CPU when you're not looking.
+On each launch, Clawtime randomly chooses the wave or **Nano Jump mode**, whose
+snappy loop has a crouch, launch, airborne stretch, landing squash, and recovery.
+Use a mode flag whenever you want a specific one. Smooth, flicker-free,
+focus-aware, and auto-centered, with basically no CPU when you're not looking.
 
 ![clawtime — the nanoclaw shrimp rendered in colorful terminal ASCII](./assets/preview.png)
 
@@ -16,6 +18,7 @@ terminal engine is derived from it.
 ```bash
 # no install
 npx clawtime
+npx clawtime --jump
 
 # or install globally
 npm install -g clawtime
@@ -31,6 +34,9 @@ WezTerm, VS Code…).
 | Flag | Description |
 | --- | --- |
 | `-c, --color <name\|#hex\|r,g,b>` | Recolor the body (e.g. `-c pink`, `-c '#ff66cc'`, `-c 255,120,180`). Default is nanoclaw teal. |
+| `-w, --wave` | Always play the claw-wave animation. |
+| `-j, --jump` | Always play the Nano Jump animation. |
+| `--mode <wave\|jump>` | Select an animation mode explicitly instead of choosing randomly. |
 | `--select-color` | Pick a color interactively. |
 | `--colors` | List the available color names. |
 | `-t, --timer <seconds>` | Run for a set duration, then exit. |
@@ -40,6 +46,10 @@ WezTerm, VS Code…).
 ```bash
 clawtime -c cyan        # a cyan shrimp
 clawtime -c '#ff9ecb'   # any hex color
+clawtime --wave         # always wave the raised claw
+clawtime --jump         # crouch, launch, land, recover
+clawtime --mode jump    # the explicit mode form
+clawtime --jump -c pink # modes and colors compose
 clawtime -t 10          # wave for 10 seconds
 clawtime -nf            # never pause
 ```
@@ -72,10 +82,12 @@ approximation:
    sprite into two layers** — the body and the *raised claw* (SVG path #15 plus
    only its nearby navy outline) — and records an overlapping shoulder pivot →
    `scripts/base-sprite.json`.
-2. `scripts/generate.mjs` builds an 84-frame seamless loop. The **claw rotates
-   about the shoulder with an eased wave envelope**, the antenna tips sway, the
-   face blinks, and sparse bubbles and glints add life without
-   hiding the character → `src/animation-data.ts`.
+2. `scripts/generate.mjs` builds two seamless loops. The default 84-frame loop
+   **rotates the claw about the shoulder with an eased wave envelope** while the
+   antenna tips sway and the face blinks. The 36-frame Nano Jump loop uses the
+   reference emoji's key beats—anticipation, stretch, apex, landing squash, and
+   recovery—with a grounded shadow and restrained impact effects →
+   `src/animation-data.ts`.
 3. At runtime, `src/animation.ts` turns each pair of source rows into one line of
    `$`, `%`, `*`, `@`, `+`, `x`, `~`, and `·` density characters. The result has
    Ghosttime's soft ASCII texture while retaining Nanoclaw's 24-bit teal, navy,
@@ -94,6 +106,7 @@ npm run build          # bundle src/cli.ts -> dist/cli.js (needs bun)
 node scripts/generate.mjs --pixels 0 > frame0.html   # source pixel grid
 node scripts/generate.mjs --hero      > hero.html    # two colored ASCII poses
 node scripts/generate.mjs --ascii 0                  # plain terminal characters
+node scripts/generate.mjs --ascii 11 --jump          # jump apex
 ```
 
 ## Credits

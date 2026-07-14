@@ -1,11 +1,11 @@
 {
   "name": "clawtime",
   "version": "1.0.0",
-  "description": "A beautiful terminal animation of the nanoclaw shrimp — a cute waving crustacean, right in your terminal.",
+  "description": "A beautiful terminal animation of the nanoclaw shrimp — waving or jumping right in your terminal.",
   "type": "module",
   "module": "src/cli.ts",
   "bin": {
-    "clawtime": "./dist/cli.js"
+    "clawtime": "dist/cli.js"
   },
   "files": [
     "dist",
@@ -29,6 +29,7 @@
     "ascii-art",
     "ansi",
     "shrimp",
+    "jump",
     "nanoclaw",
     "crustacean",
     "fun"
