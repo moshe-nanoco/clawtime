@@ -199,30 +199,26 @@ const WAVE_FRAMES = Array.from({ length: WAVE_FRAME_COUNT }, (_, t) => buildWave
 // The jump is driven by the same eight beats as the Nano Jump emoji: idle,
 // anticipation crouch, launch stretch, apex, fall, landing squash, rebound, and
 // settle. Smooth interpolation keeps that 8-frame personality without the
-// choppiness of directly copying its 130 ms frame holds.
-const FULL_SPRITE = Array.from({ length: BH }, (_, y) => {
-  let row = "";
-  for (let x = 0; x < BW; x++) {
-    const arm = cellOf(ARM, x, y);
-    row += arm !== "." ? arm : cellOf(BODY, x, y);
-  }
-  return row;
-});
-
+// choppiness of directly copying its 130 ms frame holds. The body and the raised
+// claw are kept as separate layers (like the wave) so the claw pumps through the
+// jump instead of riding along frozen.
 const JUMP_ANCHOR_X = 30;
 const JUMP_ANCHOR_Y = 67;
 const JUMP_SPRITE_HEIGHT = 68; // rows below this are the SVG's ground shadow
 const JUMP_GROUND_Y = OY + 69;
+// `claw` is the raised claw's rotation in degrees about the shoulder: it cocks
+// back on the crouch, is thrown up through the launch and apex, and snaps down
+// with the landing before settling to rest.
 const JUMP_KEYS = [
-  { p: 0.00, sx: 1.00, sy: 1.00, lift: 0, shadow: 0.90, impact: 0 },
-  { p: 0.10, sx: 1.08, sy: 0.87, lift: 0, shadow: 1.08, impact: 0 },
-  { p: 0.20, sx: 0.94, sy: 1.09, lift: -4, shadow: 0.78, impact: 0 },
-  { p: 0.32, sx: 0.98, sy: 1.02, lift: -9, shadow: 0.52, impact: 0 },
-  { p: 0.42, sx: 0.99, sy: 0.98, lift: -4, shadow: 0.72, impact: 0 },
-  { p: 0.50, sx: 1.10, sy: 0.85, lift: 0, shadow: 1.12, impact: 1 },
-  { p: 0.59, sx: 0.98, sy: 1.04, lift: -2, shadow: 0.88, impact: 0 },
-  { p: 0.68, sx: 1.00, sy: 1.00, lift: 0, shadow: 0.90, impact: 0 },
-  { p: 1.00, sx: 1.00, sy: 1.00, lift: 0, shadow: 0.90, impact: 0 },
+  { p: 0.00, sx: 1.00, sy: 1.00, lift: 0, shadow: 0.90, impact: 0, claw: 0 },
+  { p: 0.10, sx: 1.08, sy: 0.87, lift: 0, shadow: 1.08, impact: 0, claw: -11 },
+  { p: 0.20, sx: 0.94, sy: 1.09, lift: -4, shadow: 0.78, impact: 0, claw: 15 },
+  { p: 0.32, sx: 0.98, sy: 1.02, lift: -9, shadow: 0.52, impact: 0, claw: 24 },
+  { p: 0.42, sx: 0.99, sy: 0.98, lift: -4, shadow: 0.72, impact: 0, claw: 12 },
+  { p: 0.50, sx: 1.10, sy: 0.85, lift: 0, shadow: 1.12, impact: 1, claw: -9 },
+  { p: 0.59, sx: 0.98, sy: 1.04, lift: -2, shadow: 0.88, impact: 0, claw: 6 },
+  { p: 0.68, sx: 1.00, sy: 1.00, lift: 0, shadow: 0.90, impact: 0, claw: 0 },
+  { p: 1.00, sx: 1.00, sy: 1.00, lift: 0, shadow: 0.90, impact: 0, claw: 0 },
 ];
 
 const smoothstep = (value) => value * value * (3 - 2 * value);
@@ -240,6 +236,7 @@ function sampleJumpPose(p) {
       lift: lerp(from.lift, to.lift, amount),
       shadow: lerp(from.shadow, to.shadow, amount),
       impact: lerp(from.impact, to.impact, amount),
+      claw: lerp(from.claw, to.claw, amount),
     };
   }
   return JUMP_KEYS[JUMP_KEYS.length - 1];
@@ -267,14 +264,33 @@ function buildJumpFrame(t) {
 
   // Inverse-map the official mascot around the point where its body meets the
   // ground. Non-uniform scale supplies the anticipation, launch stretch, and
-  // landing squash while keeping the face and claw unmistakably Nanoclaw.
+  // landing squash while keeping the face and claw unmistakably Nanoclaw. The
+  // body draws first; the raised claw is a separate layer rotated about the
+  // shoulder (in un-scaled sprite space, so it inherits the same squash/stretch
+  // and stays attached) and composited on top so it pumps through the jump.
+  const theta = (pose.claw * Math.PI) / 180;
+  const cos = Math.cos(theta), sin = Math.sin(theta);
   for (let y = 0; y < CH; y++)
     for (let x = 0; x < CW; x++) {
-      const sourceX = Math.round(JUMP_ANCHOR_X + (x - anchorX) / pose.sx);
-      const sourceY = Math.round(JUMP_ANCHOR_Y + (y - anchorY) / pose.sy);
-      if (sourceY < 0 || sourceY >= JUMP_SPRITE_HEIGHT) continue;
-      const value = cellOf(FULL_SPRITE, sourceX, sourceY);
-      if (value !== ".") canvas[y][x] = value;
+      const fx = JUMP_ANCHOR_X + (x - anchorX) / pose.sx;
+      const fy = JUMP_ANCHOR_Y + (y - anchorY) / pose.sy;
+
+      // Body layer (holes where the raised claw was split out), minus the SVG's
+      // baked ground shadow — drawJumpShadow supplies a live one instead.
+      const bodyY = Math.round(fy);
+      if (bodyY >= 0 && bodyY < JUMP_SPRITE_HEIGHT) {
+        const bodyVal = cellOf(BODY, Math.round(fx), bodyY);
+        if (bodyVal !== ".") canvas[y][x] = bodyVal;
+      }
+
+      // Raised-claw layer, inverse-rotated about the shoulder pivot.
+      const rx = fx - PVX, ry = fy - PVY;
+      const armX = Math.round(PVX + rx * cos + ry * sin);
+      const armY = Math.round(PVY - rx * sin + ry * cos);
+      if (armY >= 0 && armY < JUMP_SPRITE_HEIGHT) {
+        const armVal = cellOf(ARM, armX, armY);
+        if (armVal !== ".") canvas[y][x] = armVal;
+      }
     }
 
   // The reference has a clean airborne silhouette followed by a sharp impact.
