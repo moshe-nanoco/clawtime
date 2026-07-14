@@ -3,9 +3,11 @@
 // mascot split into two palette-indexed pixel layers (body + raised arm) plus the
 // shoulder pivot, so generate.mjs can rotate the arm to wave.
 //
-// The raised arm is SVG path #15 (verified by position). Its navy "backing" is
-// part of the single silhouette path, so we grab the navy pixels hugging the arm
-// into the arm layer by dilation.
+// The raised arm is SVG path #15 (verified by position). Its navy outline is
+// part of the mascot's one-piece silhouette, so we grow the fill mask by a small,
+// fixed radius to pick up only the outline immediately around the claw. The old
+// implementation flood-filled connected navy pixels and eventually swallowed
+// chunks of the face, antennae, and body into the arm layer.
 //
 // Design-time tool (macOS: uses `qlmanage` + `sips`). The resulting
 // base-sprite.json is committed, so building/using clawtime never needs this.
@@ -21,7 +23,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const SVG = join(__dirname, "..", "assets", "nanoclaw-light-square.svg");
 const TMP = tmpdir();
 const ARM_PATHS = [15]; // the raised arm + pincer
-const CUT = -2; // px behind the shoulder to start the body/arm split
+const OUTLINE_RADIUS = 3;
+const SHOULDER_OVERLAP_RADIUS = 5;
 
 function renderBMP(svgText, name) {
   const svgPath = join(TMP, name + ".svg");
@@ -74,34 +77,41 @@ const quant = (c) => { const tint = c[1] > c[0] + 6 && c[2] > c[0] + 2; let best
 const baseGrid = []; for (let y = 0; y < TH; y++) { let s = ""; for (let x = 0; x < TW; x++) s += bg[y][x] ? "." : quant(favg[y][x]); baseGrid.push(s); }
 const armCore = []; for (let y = 0; y < TH; y++) { const r = []; for (let x = 0; x < TW; x++) r.push(!isWhite(aavg[y][x][0], aavg[y][x][1], aavg[y][x][2])); armCore.push(r); }
 
-// shoulder pivot = bottom-left of the arm core; tip = the farthest core cell
+// Shoulder pivot = bottom-left of the arm core.
 let piv = [0, 0], bestS = -1e9;
 for (let y = 0; y < TH; y++) for (let x = 0; x < TW; x++) if (armCore[y][x]) { const s = y - x; if (s > bestS) { bestS = s; piv = [x, y]; } }
-let tip = piv, bestD = -1;
-for (let y = 0; y < TH; y++) for (let x = 0; x < TW; x++) if (armCore[y][x]) { const d = (x - piv[0]) ** 2 + (y - piv[1]) ** 2; if (d > bestD) { bestD = d; tip = [x, y]; } }
-let ax = tip[0] - piv[0], ay = tip[1] - piv[1]; const al = Math.hypot(ax, ay) || 1; ax /= al; ay /= al;
-const proj = (x, y) => (x - piv[0]) * ax + (y - piv[1]) * ay;
-
-// The arm's teal fill is exactly the arm core (SVG #15). Its navy outline/shadow
-// is the navy that hugs it — captured by flooding OUTWARD along navy pixels only,
-// stopping at the shoulder (proj < CUT). Following navy-only means the claw takes
-// its whole outline with it but never steals the body's teal.
+// The arm's teal fill is exactly SVG path #15. Grow it by a bounded Chebyshev
+// radius and intersect that growth with the full mascot. This captures the thick
+// navy outline and the negative space inside the pincer without walking along the
+// rest of the connected silhouette.
 const armMask = Array.from({ length: TH }, () => new Array(TW).fill(false));
-const astk = [];
-for (let y = 0; y < TH; y++) for (let x = 0; x < TW; x++) if (armCore[y][x]) { armMask[y][x] = true; astk.push([x, y]); }
-while (astk.length) {
-  const [x, y] = astk.pop();
-  for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
-    if (nx < 0 || ny < 0 || nx >= TW || ny >= TH || armMask[ny][nx]) continue;
-    if ((baseGrid[ny][nx] ?? ".") !== "o") continue; // only follow the navy outline
-    if (proj(nx, ny) < CUT) continue; // stop at the shoulder
-    armMask[ny][nx] = true;
-    astk.push([nx, ny]);
-  }
-}
+const armCells = [];
+for (let y = 0; y < TH; y++)
+  for (let x = 0; x < TW; x++)
+    if (armCore[y][x]) armCells.push([x, y]);
+
+for (const [cx, cy] of armCells)
+  for (let dy = -OUTLINE_RADIUS; dy <= OUTLINE_RADIUS; dy++)
+    for (let dx = -OUTLINE_RADIUS; dx <= OUTLINE_RADIUS; dx++) {
+      const x = cx + dx, y = cy + dy;
+      if (x < 0 || y < 0 || x >= TW || y >= TH) continue;
+      if ((baseGrid[y][x] ?? ".") !== ".") armMask[y][x] = true;
+    }
 
 const bodyL = [], armL = [];
-for (let y = 0; y < TH; y++) { let b = "", a = ""; for (let x = 0; x < TW; x++) { const c = baseGrid[y][x] ?? "."; if (armMask[y][x]) { a += c; b += "."; } else { a += "."; b += c; } } bodyL.push(b.replace(/\.+$/u, "")); armL.push(a.replace(/\.+$/u, "")); }
+for (let y = 0; y < TH; y++) {
+  let b = "", a = "";
+  for (let x = 0; x < TW; x++) {
+    const c = baseGrid[y][x] ?? ".";
+    const atShoulder = Math.hypot(x - piv[0], y - piv[1]) <= SHOULDER_OVERLAP_RADIUS;
+    a += armMask[y][x] ? c : ".";
+    // Duplicate a small shoulder patch into both layers. It hides sub-cell gaps
+    // when the arm rotates and keeps the limb visibly attached at every pose.
+    b += !armMask[y][x] || atShoulder ? c : ".";
+  }
+  bodyL.push(b.replace(/\.+$/u, ""));
+  armL.push(a.replace(/\.+$/u, ""));
+}
 
 writeFileSync(join(__dirname, "base-sprite.json"), JSON.stringify({ w: TW, h: TH, body: bodyL, arm: armL, pivot: piv }));
-console.log(`base-sprite.json ${TW}x${TH} pivot ${piv} axis ${ax.toFixed(2)},${ay.toFixed(2)} armCells ${armMask.flat().filter(Boolean).length}`);
+console.log(`base-sprite.json ${TW}x${TH} pivot ${piv} armCells ${armMask.flat().filter(Boolean).length}`);

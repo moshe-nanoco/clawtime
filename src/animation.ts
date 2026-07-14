@@ -1,79 +1,111 @@
-// Rendering engine: turns palette-indexed pixel grids into colored half-block
-// terminal lines.
-//
-// The animation data is a list of frames; each frame is a list of PIXEL rows
-// (top-to-bottom), and each row is a string of palette keys — one character per
-// pixel, "." = transparent. Two pixel rows are packed into one line of text
-// using the upper-half-block "▀" (foreground = top pixel, background = bottom
-// pixel), which doubles vertical resolution and reproduces the mascot faithfully.
-//
-// Colors are 24-bit. The body color ("t") can be swapped at runtime via the -c
-// flag; everything else (outline, shading, eyes) is fixed.
+// Rendering engine: turns palette-indexed source pixels into colored terminal
+// density characters. Two source rows become one terminal row, preserving the
+// Nanoclaw silhouette while giving it Ghosttime's soft ASCII texture instead of
+// a wall of square half-block pixels.
 
 type AnimationData = string[][];
+
+type Cell = {
+  key: string | null;
+  glyph: string;
+};
 
 export class Animation {
   private static frames: string[][] = [];
   private static readonly RESET = "\x1b[0m";
 
-  // palette key -> "r;g;b". "t" (teal body) is overridable with setHighlightColor.
+  // Palette key -> "r;g;b". The outline is lifted slightly from the SVG's near-
+  // black navy so it remains legible on dark terminal themes.
   private static palette: Record<string, string> = {
-    o: "18;23;41", //   navy outline / shadow
-    t: "86;237;214", // teal body
-    d: "36;150;134", // dark teal shade
-    l: "176;240;228", // light teal (legs / underside)
-    w: "246;250;249", // white (eyes)
+    o: "24;35;58", // navy outline
+    t: "86;237;214", // Nanoclaw teal
+    d: "36;150;134", // deep body shade
+    l: "176;240;228", // light body highlight
+    w: "246;250;249", // eyes
+    b: "112;220;212", // bubbles
+    s: "216;255;247", // glints
   };
 
-  /** Override the body color. Accepts an "r;g;b" string. */
+  private static readonly solidGlyph: Record<string, string> = {
+    o: "@",
+    t: "$",
+    d: "%",
+    l: "*",
+    w: "o",
+    b: "o",
+    s: "+",
+  };
+
+  private static readonly edgeGlyph: Record<string, string> = {
+    o: "+",
+    t: "x",
+    d: "~",
+    l: "·",
+    w: "·",
+    b: "o",
+    s: "+",
+  };
+
+  /** Recolor the body while deriving matching shade and highlight tones. */
   static setHighlightColor(rgb: string): void {
-    this.palette.t = rgb;
+    const channels = rgb.split(";").map(Number);
+    if (channels.length !== 3 || channels.some((channel) => !Number.isFinite(channel))) return;
+    const base = channels.map((channel) => Math.max(0, Math.min(255, channel)));
+    const mix = (target: number[], amount: number) =>
+      base.map((channel, index) => Math.round(channel + (target[index] - channel) * amount)).join(";");
+
+    this.palette.t = base.join(";");
+    this.palette.d = mix([12, 34, 42], 0.45);
+    this.palette.l = mix([246, 255, 252], 0.56);
+    this.palette.b = mix([218, 255, 248], 0.38);
   }
 
   static initialize(data: AnimationData): void {
-    this.frames = data.map((grid) => this.renderHalfBlocks(grid));
+    this.frames = data.map((grid) => this.renderAscii(grid));
   }
 
-  private static renderHalfBlocks(grid: string[]): string[] {
+  private static chooseCell(top: string, bottom: string): Cell {
+    const hasTop = top !== ".";
+    const hasBottom = bottom !== ".";
+    if (!hasTop && !hasBottom) return { key: null, glyph: " " };
+
+    if (hasTop !== hasBottom) {
+      const key = hasTop ? top : bottom;
+      return { key, glyph: this.edgeGlyph[key] ?? "·" };
+    }
+
+    if (top === bottom) {
+      return { key: top, glyph: this.solidGlyph[top] ?? "$" };
+    }
+
+    // Keep outline/eye boundaries crisp when the two vertically sampled pixels
+    // have different palette colors.
+    const priority = ["w", "s", "o", "l", "d", "t", "b"];
+    const key = priority.find((candidate) => candidate === top || candidate === bottom) ?? top;
+    const glyph = key === "w" || key === "b" ? "o" : key === "s" ? "+" : key === "o" ? "%" : "*";
+    return { key, glyph };
+  }
+
+  private static renderAscii(grid: string[]): string[] {
     const lines: string[] = [];
-    for (let r = 0; r < grid.length; r += 2) {
-      const top = grid[r] ?? "";
-      const bot = grid[r + 1] ?? "";
-      const width = Math.max(top.length, bot.length);
+    for (let row = 0; row < grid.length; row += 2) {
+      const top = grid[row] ?? "";
+      const bottom = grid[row + 1] ?? "";
+      const width = Math.max(top.length, bottom.length);
       let line = "";
-      let cur = "";
+      let currentColor = "";
+
       for (let x = 0; x < width; x++) {
-        const tc = top[x] ?? ".";
-        const bc = bot[x] ?? ".";
-        const tset = tc !== ".";
-        const bset = bc !== ".";
-        let glyph: string;
-        let style: string;
-        if (!tset && !bset) {
-          glyph = " ";
-          style = "";
-        } else if (tset && bset) {
-          if (tc === bc) {
-            glyph = "█";
-            style = `38;2;${this.palette[tc]}`;
-          } else {
-            glyph = "▀";
-            style = `38;2;${this.palette[tc]};48;2;${this.palette[bc]}`;
-          }
-        } else if (tset) {
-          glyph = "▀";
-          style = `38;2;${this.palette[tc]}`;
-        } else {
-          glyph = "▄";
-          style = `38;2;${this.palette[bc]}`;
+        const cell = this.chooseCell(top[x] ?? ".", bottom[x] ?? ".");
+        const nextColor = cell.key ? this.palette[cell.key] ?? "" : "";
+        if (nextColor !== currentColor) {
+          line += nextColor ? `\x1b[38;2;${nextColor}m` : this.RESET;
+          currentColor = nextColor;
         }
-        if (style !== cur) {
-          line += style === "" ? this.RESET : `\x1b[${style}m`;
-          cur = style;
-        }
-        line += glyph;
+        line += cell.glyph;
       }
-      if (cur !== "") line += this.RESET;
+
+      if (currentColor) line += this.RESET;
       lines.push(line);
     }
     return lines;

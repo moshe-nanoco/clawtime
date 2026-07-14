@@ -1,13 +1,12 @@
 # 🦐 clawtime
 
-The **nanoclaw** shrimp, waving hello right in your terminal — a faithful,
-pixel-perfect rendering of the mascot that **waves its claw**, gently floats,
-blinks, and blows a few bubbles. Smooth, flicker-free, focus-aware, and
+The **nanoclaw** shrimp, waving hello right in your terminal — redrawn with the
+expressive ASCII density and fluid motion of Ghosttime. The raised claw waves,
+the antennae sway, the eyes blink, and a few bubbles and glints drift past.
+Smooth, flicker-free, focus-aware, and
 auto-centered, with basically no CPU when you're not looking.
 
-![clawtime — the nanoclaw shrimp, claw raised and mid-wave](./assets/preview.png)
-
-*(two frames of the loop — the claw swings between them)*
+![clawtime — the nanoclaw shrimp rendered in colorful terminal ASCII](./assets/preview.png)
 
 Inspired by [ghosttime](https://github.com/SohelIslamImran/ghosttime); the
 terminal engine is derived from it.
@@ -63,24 +62,25 @@ a set of pre-rendered frames plus a few ANSI/DEC escape-sequence tricks:
 
 ### The art
 
-The mascot is the **actual nanoclaw logo**, not a hand-drawn approximation:
+The mascot is built directly from the **actual nanoclaw logo**, not a hand-drawn
+approximation:
 
 1. `scripts/rasterize.mjs` rasterizes the official SVG
    (`assets/nanoclaw-light-square.svg`), crops it to the mascot, downsamples to a
    ~64-wide grid, flood-fills the white background to transparency (so the eye
    catchlights survive), and quantizes to the mascot's palette. It **splits the
-   sprite into two layers** — the body and the *raised arm* (SVG path #15, plus
-   the navy backing hugging it) — and records the shoulder pivot →
+   sprite into two layers** — the body and the *raised claw* (SVG path #15 plus
+   only its nearby navy outline) — and records an overlapping shoulder pivot →
    `scripts/base-sprite.json`.
-2. `scripts/generate.mjs` builds a seamless loop where the **arm rotates about
-   the shoulder to wave** (the body stays put), plus a gentle float-bob, an
-   occasional blink, and rising bubbles. Each frame is the body with the rotated
-   arm composited on top → `src/animation-data.ts`.
-3. At runtime, `src/animation.ts` packs each pair of pixel rows into one line of
-   text using the half-block `▀` (foreground = top pixel, background = bottom
-   pixel), doubling vertical resolution and reproducing the mascot in 24-bit
-   color. `-c` simply swaps the body color; the outline, eyes, and shading keep
-   theirs.
+2. `scripts/generate.mjs` builds an 84-frame seamless loop. The **claw rotates
+   about the shoulder with an eased wave envelope**, the antenna tips sway, the
+   face blinks, and sparse bubbles and glints add life without
+   hiding the character → `src/animation-data.ts`.
+3. At runtime, `src/animation.ts` turns each pair of source rows into one line of
+   `$`, `%`, `*`, `@`, `+`, `x`, `~`, and `·` density characters. The result has
+   Ghosttime's soft ASCII texture while retaining Nanoclaw's 24-bit teal, navy,
+   highlights, face, and silhouette. `-c` recolors the body and automatically
+   derives matching shade, highlight, and bubble tones.
 
 ## Develop
 
@@ -90,9 +90,10 @@ npm run gen            # rebuild src/animation-data.ts (animation) from base-spr
 npm run raster         # rebuild scripts/base-sprite.json from the SVG (macOS; needs qlmanage + sips)
 npm run build          # bundle src/cli.ts -> dist/cli.js (needs bun)
 
-# preview the art as a pixel grid (writes HTML you can open):
-node scripts/generate.mjs --pixels 0 > frame0.html   # a single frame
-node scripts/generate.mjs --hero      > hero.html     # waving + blink, side by side
+# preview the art (writes HTML to stdout):
+node scripts/generate.mjs --pixels 0 > frame0.html   # source pixel grid
+node scripts/generate.mjs --hero      > hero.html    # two colored ASCII poses
+node scripts/generate.mjs --ascii 0                  # plain terminal characters
 ```
 
 ## Credits
