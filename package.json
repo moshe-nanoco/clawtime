@@ -1,6 +1,6 @@
 {
   "name": "clawtime",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A beautiful terminal animation of the nanoclaw shrimp — waving or jumping right in your terminal.",
   "type": "module",
   "module": "src/cli.ts",
