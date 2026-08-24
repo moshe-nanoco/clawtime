@@ -1,6 +1,6 @@
 {
   "name": "clawtime",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A beautiful terminal animation of the nanoclaw shrimp — waving or jumping right in your terminal.",
   "type": "module",
   "module": "src/cli.ts",
@@ -36,6 +36,14 @@
   ],
   "author": "moshe-nanoco",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moshe-nanoco/clawtime.git"
+  },
+  "homepage": "https://github.com/moshe-nanoco/clawtime#readme",
+  "bugs": {
+    "url": "https://github.com/moshe-nanoco/clawtime/issues"
+  },
   "engines": {
     "node": ">=18"
   },
